@@ -1,0 +1,5 @@
+// Temperature data type
+struct Temperature {
+    // Degrees in Celcius
+    long degrees;
+};
