@@ -1,5 +1,8 @@
 // Temperature data type
 struct Temperature {
+    // ID of the sensor sending the temperature
+    string<256> sensor_id;
+
     // Degrees in Celcius
     long degrees;
 };
