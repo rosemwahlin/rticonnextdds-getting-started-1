@@ -67,13 +67,14 @@ void publisher_main(int domain_id, int sample_count)
         string_stream << "A1234" << count;
         sample.sensor_id(string_stream.str());
 
-        // Degrees in Celcius
-        sample.degrees = 175;
+        // Degrees in Celsius
+        sample.degrees(175);
 
         std::cout << "Writing Temperature, count " << count << std::endl;
 
         writer.write(sample);
 
+        // Change this line to sleep 10 ms in between writing temperature
         rti::util::sleep(dds::core::Duration(4));
     }
 }
