@@ -55,7 +55,7 @@ void publisher_main(int domain_id, int sample_count)
     dds::domain::DomainParticipant participant (domain_id);
 
     // Create a Topic -- and automatically register the type
-    dds::topic::Topic<Temperature> topic (participant, "Example Temperature");
+    dds::topic::Topic<Temperature> topic (participant, "OvenTemperature");
 
     // Create a DataWriter with default Qos (Publisher created in-line)
     dds::pub::DataWriter<Temperature> writer(dds::pub::Publisher(participant), topic);
