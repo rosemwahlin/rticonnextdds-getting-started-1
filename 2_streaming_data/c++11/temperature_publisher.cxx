@@ -64,7 +64,7 @@ void publisher_main(int domain_id, int sample_count)
     for (int count = 0; count < sample_count || sample_count == 0; count++) {
         // Modify the data to be written here
         std::stringstream string_stream;
-        string_stream << "A1234" << count;
+        string_stream << "TT-100" << count;
         sample.sensor_id(string_stream.str());
 
         // Degrees in Celsius

@@ -77,20 +77,38 @@ int subscriber_main(int domain_id, int sample_count)
     // Create a DataReader with default Qos (Subscriber created in-line)
     dds::sub::DataReader<Temperature> reader(dds::sub::Subscriber(participant), topic);
 
-    // Create a ReadCondition for any data on this reader and associate a handler
+    // Create a Status Condition for the reader
+    dds::core::cond::StatusCondition status_condition(reader);
+
+    // Enable the 'data available' status.
+    status_condition.enabled_statuses(
+        dds::core::status::StatusMask::data_available());
+
+    // Associate a handler with the status condition
     int count = 0;
-    dds::sub::cond::ReadCondition read_condition(
-        reader,
-        dds::sub::status::DataState::any(),
-        [&reader, &count](/* dds::core::cond::Condition condition */)
-    {
-        count += process_data(reader);
+    status_condition->handler([&reader, &count]() {
+        // Since ths handler can be associated with multiple statuses 
+        dds::core::status::StatusMask status_mask = reader.status_changes();
+
+        // Confirm woken for available data (not timeout)
+        if ((status_mask &
+        dds::core::status::StatusMask::data_available()).any()) {
+
+            // Take all samples
+            dds::sub::LoanedSamples<Temperature> samples = reader.take();
+            for (const auto& sample : samples) {
+                if (sample.info().valid()) {
+                    count++;
+                    std::cout << sample.data() << std::endl;
+                }
+            }
+        }
     }
     );
 
-    // Create a WaitSet and attach the ReadCondition
+    // Create a WaitSet and attach the StatusCondition
     dds::core::cond::WaitSet waitset;
-    waitset += read_condition;
+    waitset += status_condition;
 
     while (count < sample_count || sample_count == 0) {
         // Dispatch will call the handlers associated to the WaitSet conditions
