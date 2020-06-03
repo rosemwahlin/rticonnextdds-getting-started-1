@@ -22,6 +22,9 @@
 
 using namespace application;
 
+// Exercise #2.4: Add a function to read ChocolateLotState 
+
+
 void run_example(
         unsigned int domain_id,
         unsigned int sample_count,
@@ -35,14 +38,20 @@ void run_example(
     // A Topic has a name and a datatype. Create a Topic named
     // "ChocolateTemperature" with type Temperature
     dds::topic::Topic<Temperature> topic(participant, "ChocolateTemperature");
+    // Exercise #2.1: Add a ChocolateLotstate Topic
 
     // A Publisher allows an application to create one or more DataWriters
     // Publisher QoS is configured in USER_QOS_PROFILES.xml
     dds::pub::Publisher publisher(participant);
 
+    // Exercise #2.2: Add a Subscriber
+
     // This DataWriter writes data on Topic "ChocolateTemperature"
     // DataWriter QoS is configured in USER_QOS_PROFILES.xml
     dds::pub::DataWriter<Temperature> writer(publisher, topic);
+
+    // Exercise #2.3: Add a ChocolateLotState DataReader, Condition, 
+    // WaitSet and a thread to wait for data
 
     // Create data sample for writing
     Temperature sample;
@@ -58,7 +67,7 @@ void run_example(
 
         writer.write(sample);
 
-        // Exercise: Change this to sleep 100 ms in between writing temperatures
+        // Exercise #1.1: Change this to sleep 100 ms in between writing temperatures
         rti::util::sleep(dds::core::Duration(4));
     }
 }

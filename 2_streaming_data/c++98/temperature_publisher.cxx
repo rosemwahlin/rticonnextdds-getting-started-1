@@ -26,6 +26,108 @@ static int shutdown(
         const char *shutdown_message,
         int status);
 
+// Exercise #2.6: Add function to process ChocolateLotState data
+// ----------------------------------------------------------------------
+// Process data. Returns number of samples processed.
+void process_data(ChocolateLotStateDataReader *lot_state_reader)
+{
+    ChocolateLotStateSeq data_seq;
+    DDS_SampleInfoSeq info_seq;
+
+    // Take available data from DataReader's queue
+    DDS_ReturnCode_t retcode = lot_state_reader->take(data_seq, info_seq);
+
+    if (retcode != DDS_RETCODE_OK) {
+        std::cerr << "take error " << retcode << std::endl;
+        return;
+    }
+
+    // Iterate over all available data
+    for (int i = 0; i < data_seq.length(); ++i) {
+        // Check if a sample is an instance lifecycle event
+        if (!info_seq[i].valid_data) {
+            std::cout << "Received instance state notification" << std::endl;
+            continue;
+        }
+        // Print data
+        ChocolateLotStateTypeSupport::print_data(&data_seq[i]);
+    }
+    // Data sequence was loaned from middleware for performance.
+    // Return loan when application is finished with data.
+    lot_state_reader->return_loan(data_seq, info_seq);
+
+}
+// ----------------------------------------------------------------------
+
+
+// Exercise #2.5: Add function that waits for data in a new thread
+// ----------------------------------------------------------------------
+void wait_for_data(void *reader)
+{
+    DDS_ReturnCode_t retcode = DDS_RETCODE_OK;
+
+    DDSDataReader *generic_reader = 
+            (DDSDataReader *)reader;
+
+    // A narrow is a cast from a generic DataReader to one that is specific
+    // to your type. Use the type specific DataReader to read data
+    ChocolateLotStateDataReader *lot_state_reader =
+            ChocolateLotStateDataReader::narrow(generic_reader);
+    if (lot_state_reader == NULL) {
+        return;
+    }
+
+    // Get status condition: Each entity has a Status Condition, which
+    // gets triggered when a status becomes true
+    DDSStatusCondition *status_condition = generic_reader->get_statuscondition();
+    if (status_condition == NULL) {
+        return;
+    }
+
+    // Enable only the status we are interested in:
+    //   DDS_DATA_AVAILABLE_STATUS
+    retcode = status_condition->set_enabled_statuses(DDS_DATA_AVAILABLE_STATUS);
+    if (retcode != DDS_RETCODE_OK) {
+        return;
+    }
+
+    // Create the WaitSet and attach the Status Condition to it. The WaitSet
+    // will be woken when the condition is triggered.
+    DDSWaitSet waitset;
+    retcode = waitset.attach_condition(status_condition);
+    if (retcode != DDS_RETCODE_OK) {
+        return;
+    }
+
+    // wait() blocks execution of the thread until one or more attached
+    // Conditions become true, or until a user-specified timeout expires.
+    while (!shutdown_requested) {
+        DDSConditionSeq active_conditions_seq;
+
+        DDS_Duration_t wait_timeout = { 4, 0 };
+        retcode = waitset.wait(active_conditions_seq, wait_timeout);
+
+        // You get a timeout if no conditions were triggered before the timeout
+        if (retcode == DDS_RETCODE_TIMEOUT) {
+            std::cout << "Wait timed out after 4 seconds." << std::endl;
+            continue;
+        } else if (retcode != DDS_RETCODE_OK) {
+            std::cerr << "wait returned error: " << retcode << std::endl;
+            break;
+        }
+        // Get the status changes to check which status condition
+        // triggered the WaitSet to wake
+        DDS_StatusMask triggeredmask = lot_state_reader->get_status_changes();
+
+        // If the status is "Data Available"
+        if (triggeredmask & DDS_DATA_AVAILABLE_STATUS) {
+            process_data(lot_state_reader);
+        }
+    }
+}
+// ----------------------------------------------------------------------
+
+
 int run_example(
         unsigned int domain_id,
         unsigned int sample_count,
@@ -45,20 +147,35 @@ int run_example(
     if (participant == NULL) {
         return shutdown(participant, "create_participant error", EXIT_FAILURE);
     }
+    DDS_ReturnCode_t retcode = DDS_RETCODE_OK;
 
-    // A Publisher allows an application to create one or more DataWriters
-    // Publisher QoS is configured in USER_QOS_PROFILES.xml
-    DDSPublisher *publisher = participant->create_publisher(
-            DDS_PUBLISHER_QOS_DEFAULT,
+    // Exercise #2.1: Register the ChocolateLotstate type, and add a
+    // ChocolateLotstate Topic
+    // ----------------------------------------------------------------------
+    // Register the datatype to use when creating the Topic
+    const char *lot_type_name = ChocolateLotStateTypeSupport::get_type_name();
+    retcode =
+            ChocolateLotStateTypeSupport::register_type(participant, lot_type_name);
+    if (retcode != DDS_RETCODE_OK) {
+        return shutdown(participant, "register_type error", EXIT_FAILURE);
+    }
+
+    // A Topic has a name and a datatype. Create a Topic called
+    // "ChocolateTemperature" with your registered data type
+    DDSTopic *chocolate_lot_topic = participant->create_topic(
+            "ChocolateLotState",
+            lot_type_name,
+            DDS_TOPIC_QOS_DEFAULT,
             NULL /* listener */,
             DDS_STATUS_MASK_NONE);
-    if (publisher == NULL) {
-        return shutdown(participant, "create_publisher error", EXIT_FAILURE);
+    if (chocolate_lot_topic == NULL) {
+        return shutdown(participant, "create_topic error", EXIT_FAILURE);
     }
+    // ----------------------------------------------------------------------
 
     // Register the datatype to use when creating the Topic
     const char *type_name = TemperatureTypeSupport::get_type_name();
-    DDS_ReturnCode_t retcode =
+    retcode =
             TemperatureTypeSupport::register_type(participant, type_name);
     if (retcode != DDS_RETCODE_OK) {
         return shutdown(participant, "register_type error", EXIT_FAILURE);
@@ -75,6 +192,52 @@ int run_example(
     if (topic == NULL) {
         return shutdown(participant, "create_topic error", EXIT_FAILURE);
     }
+
+    // Exercise #2.2: Add a Subscriber
+    // ----------------------------------------------------------------------
+    // A Subscriber allows an application to create one or more DataReaders
+    // Subscriber QoS is configured in USER_QOS_PROFILES.xml
+    DDSSubscriber *subscriber = participant->create_subscriber(
+            DDS_SUBSCRIBER_QOS_DEFAULT,
+            NULL /* listener */,
+            DDS_STATUS_MASK_NONE);
+    if (subscriber == NULL) {
+        shutdown(participant, "create_subscriber error", EXIT_FAILURE);
+    }
+    // ----------------------------------------------------------------------
+
+    // A Publisher allows an application to create one or more DataWriters
+    // Publisher QoS is configured in USER_QOS_PROFILES.xml
+    DDSPublisher *publisher = participant->create_publisher(
+            DDS_PUBLISHER_QOS_DEFAULT,
+            NULL /* listener */,
+            DDS_STATUS_MASK_NONE);
+    if (publisher == NULL) {
+        return shutdown(participant, "create_publisher error", EXIT_FAILURE);
+    }
+
+    // Exercise #2.3: Create a DataReader
+    // ----------------------------------------------------------------------
+    // This DataReader reads data of type Temperature on Topic
+    // "ChocolateTemperature". DataReader QoS is configured in
+    // USER_QOS_PROFILES.xml
+    DDSDataReader *reader = subscriber->create_datareader(
+            chocolate_lot_topic,
+            DDS_DATAREADER_QOS_DEFAULT,
+            NULL,
+            DDS_STATUS_MASK_NONE);
+    if (reader == NULL) {
+        shutdown(participant, "create_datareader error", EXIT_FAILURE);
+    }
+    // ----------------------------------------------------------------------
+
+
+    // Exercise #2.4: Create a thread that will wait for data
+    // ----------------------------------------------------------------------
+    OSThread thread((ThreadFunction)wait_for_data, (void *)reader);
+    thread.run();
+    // ----------------------------------------------------------------------
+
 
     // This DataWriter writes data on Topic "ChocolateTemperature"
     // DataWriter QoS is configured in USER_QOS_PROFILES.xml
@@ -125,6 +288,12 @@ int run_example(
         DDS_Duration_t send_period = { 4, 0 };
         NDDSUtility::sleep(send_period);
     }
+
+    // Exercise #2.7: Add thread join to wait for reading thread to finish
+    // ----------------------------------------------------------------------
+    // Wait for reader thread to finish
+    thread.join();
+    // ----------------------------------------------------------------------
 
     // Cleanup
     // -------

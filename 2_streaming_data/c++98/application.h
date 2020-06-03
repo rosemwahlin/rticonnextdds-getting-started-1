@@ -20,6 +20,87 @@
 
 namespace application {
 
+
+#ifdef RTI_WIN32
+  /* strtok, fopen warnings */
+  #pragma warning( disable : 4996 )
+#endif
+
+#ifdef RTI_WIN32
+  #define DllExport __declspec( dllexport )
+  #include <Winsock2.h>
+  #include <process.h>
+#else
+  #define DllExport
+  #include <sys/select.h>
+  #include <semaphore.h>
+  #include <pthread.h>
+#endif
+
+
+// A function that takes a void pointer, and is passed to the thread creation
+// function.
+typedef void* (*ThreadFunction)(void *);
+
+class OSThread
+{
+
+public:
+    OSThread(ThreadFunction function, void *function_param):
+            function(function),
+            function_param(function_param)
+    {
+    }
+
+    // Run the thread
+    void run()
+    {
+#ifdef RTI_WIN32
+        thread = (HANDLE) _beginthread(
+            (void(__cdecl*)(void*))function,
+            0, (void*)function_param);
+#else
+        pthread_attr_t thread_attr;
+        pthread_attr_init(&thread_attr);
+        pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+        int error = pthread_create(
+                    &thread,
+                    &thread_attr,
+                    function,
+                    (void *)function_param);
+        pthread_attr_destroy(&thread_attr);
+#endif
+    }
+    // Join the thread
+    void join()
+    {
+#ifdef RTI_WIN32
+        WaitForSingleObject(thread, INFINITE);
+#else
+        void *ret_val;
+        int error = pthread_join(thread, &ret_val);
+#endif
+    }
+
+
+private:
+    // --- Private members ---
+
+    // OS-specific thread definition
+#ifdef RTI_WIN32
+    HANDLE thread;
+#else
+    pthread_t thread;
+#endif
+    // Function called by OS-specific thread
+    ThreadFunction function;
+
+    // Parameter to the function
+    void *function_param;
+};
+
+
+
 // Catch control-C and tell application to shut down
 bool shutdown_requested = false;
 

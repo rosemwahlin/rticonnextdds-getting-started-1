@@ -10,6 +10,24 @@
  * to use the software.
  */
 
+
+// Status of the chocolate lot
+enum LotStatusKind {
+    WAITING,
+    PROCESSING,
+    COMPLETED
+};
+
+// ChocolateLotState data type
+struct ChocolateLotState {
+    // Unique ID of the chocolate lot being produced.
+    // rolls over each day.
+    uint32 lot_id;
+
+    // Current status of the chocolate lot: Waiting/Processing/Completed
+    LotStatusKind lot_status;
+};
+
 // Temperature data type
 struct Temperature {
     // ID of the sensor sending the temperature

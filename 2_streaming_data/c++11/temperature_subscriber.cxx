@@ -23,6 +23,9 @@
 
 using namespace application;
 
+
+// Exercise #2.7: Add a function to write data
+
 unsigned int process_data(dds::sub::DataReader<Temperature>& reader)
 {
     // Take all samples.  Samples are loaned to application, loan is
@@ -49,10 +52,15 @@ void run_example(unsigned int domain_id, unsigned int sample_count)
     // A Topic has a name and a datatype. Create a Topic named
     // "ChocolateTemperature" with type Temperature
     dds::topic::Topic<Temperature> topic(participant, "ChocolateTemperature");
+    // Exercise #2.5: Add a ChocolateLotstate Topic
+
 
     // A Subscriber allows an application to create one or more DataReaders
     // Subscriber QoS is configured in USER_QOS_PROFILES.xml
     dds::sub::Subscriber subscriber(participant);
+
+    // Exercise #2.6: Add a Publisher, ChocolateLotState DataWriter, and a
+    // thread to write data
 
     // This DataReader reads data of type Temperature on Topic
     // "ChocolateTemperature". DataReader QoS is configured in
